@@ -52,7 +52,7 @@ RUN apt-get update && \
     else \
         echo export "GIT_SSH_COMMAND=\"ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 -o ProxyCommand='nc -X 5 -x ${socks_proxy} %h %p'\"" >> ${HOME}/.bashrc; \
     fi && \
-    python3 -m pip install --no-cache-dir -U pip==20.0.1 setuptools && \
+    python3 -m pip install --no-cache-dir -U pip==20.0.1 setuptools  -i https://pypi.doubanio.com/simple/ && \
     ln -fs /usr/share/zoneinfo/${TZ} /etc/localtime && \
     dpkg-reconfigure -f noninteractive tzdata && \
     add-apt-repository --remove ppa:mc3man/gstffmpeg-keep -y && \
@@ -97,9 +97,9 @@ RUN if [ "$AUTO_SEGMENTATION" = "yes" ]; then \
 # Install and initialize CVAT, copy all necessary files
 COPY cvat/requirements/ /tmp/requirements/
 COPY supervisord.conf mod_wsgi.conf wait-for-it.sh manage.py ${HOME}/
-RUN python3 -m pip install --no-cache-dir -r /tmp/requirements/${DJANGO_CONFIGURATION}.txt
+RUN python3 -m pip install --no-cache-dir -r /tmp/requirements/${DJANGO_CONFIGURATION}.txt -i https://pypi.doubanio.com/simple/
 # pycocotools package is impossible to install with its dependencies by one pip install command
-RUN python3 -m pip install --no-cache-dir pycocotools==2.0.0
+RUN python3 -m pip install --no-cache-dir pycocotools==2.0.0 -i https://pypi.doubanio.com/simple/
 
 
 # CUDA support
@@ -126,7 +126,7 @@ COPY cvat-core/ ${HOME}/cvat-core
 COPY tests ${HOME}/tests
 COPY datumaro/ ${HOME}/datumaro
 
-RUN python3 -m pip install --no-cache-dir -r ${HOME}/datumaro/requirements.txt
+RUN python3 -m pip install --no-cache-dir -r ${HOME}/datumaro/requirements.txt -i https://pypi.doubanio.com/simple/
 
 # Binary option is necessary to correctly apply the patch on Windows platform.
 # https://unix.stackexchange.com/questions/239364/how-to-fix-hunk-1-failed-at-1-different-line-endings-message
