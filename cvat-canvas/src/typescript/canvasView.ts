@@ -74,7 +74,7 @@ export class CanvasViewImpl implements CanvasView, Listener {
         return this.controller.mode;
     }
 
-    private onDrawDone(data: object, continueDraw?: boolean): void {
+    private onDrawDone(data: object | null, duration: number, continueDraw?: boolean): void {
         if (data) {
             const { zLayer } = this.controller;
             const event: CustomEvent = new CustomEvent('canvas.drawn', {
@@ -87,6 +87,7 @@ export class CanvasViewImpl implements CanvasView, Listener {
                         zOrder: zLayer || 0,
                     },
                     continue: continueDraw,
+                    duration,
                 },
             });
 
@@ -137,12 +138,13 @@ export class CanvasViewImpl implements CanvasView, Listener {
         this.mode = Mode.IDLE;
     }
 
-    private onMergeDone(objects: any[]): void {
+    private onMergeDone(objects: any[]| null, duration?: number): void {
         if (objects) {
             const event: CustomEvent = new CustomEvent('canvas.merged', {
                 bubbles: false,
                 cancelable: true,
                 detail: {
+                    duration,
                     states: objects,
                 },
             });
@@ -283,7 +285,7 @@ export class CanvasViewImpl implements CanvasView, Listener {
     }
 
     private moveCanvas(): void {
-        for (const obj of [this.background, this.grid, this.loadingAnimation]) {
+        for (const obj of [this.background, this.grid]) {
             obj.style.top = `${this.geometry.top}px`;
             obj.style.left = `${this.geometry.left}px`;
         }
@@ -301,7 +303,7 @@ export class CanvasViewImpl implements CanvasView, Listener {
 
     private transformCanvas(): void {
         // Transform canvas
-        for (const obj of [this.background, this.grid, this.loadingAnimation, this.content]) {
+        for (const obj of [this.background, this.grid, this.content]) {
             obj.style.transform = `scale(${this.geometry.scale}) rotate(${this.geometry.angle}deg)`;
         }
 
@@ -356,7 +358,7 @@ export class CanvasViewImpl implements CanvasView, Listener {
     }
 
     private resizeCanvas(): void {
-        for (const obj of [this.background, this.grid, this.loadingAnimation]) {
+        for (const obj of [this.background, this.grid]) {
             obj.style.width = `${this.geometry.image.width}px`;
             obj.style.height = `${this.geometry.image.height}px`;
         }
@@ -454,6 +456,27 @@ export class CanvasViewImpl implements CanvasView, Listener {
             e.preventDefault();
         }
 
+        function contextmenuHandler(e: MouseEvent): void {
+            const pointID = Array.prototype.indexOf
+                .call(((e.target as HTMLElement).parentElement as HTMLElement).children, e.target);
+            if (self.activeElement.clientID !== null) {
+                const [state] = self.controller.objects
+                    .filter((_state: any): boolean => (
+                        _state.clientID === self.activeElement.clientID
+                    ));
+                self.canvas.dispatchEvent(new CustomEvent('point.contextmenu', {
+                    bubbles: false,
+                    cancelable: true,
+                    detail: {
+                        mouseEvent: e,
+                        objectState: state,
+                        pointID,
+                    },
+                }));
+            }
+            e.preventDefault();
+        }
+
         if (value) {
             (shape as any).selectize(value, {
                 deepSelect: true,
@@ -476,6 +499,7 @@ export class CanvasViewImpl implements CanvasView, Listener {
                         });
 
                         circle.on('dblclick', dblClickHandler);
+                        circle.on('contextmenu', contextmenuHandler);
                         circle.addClass('cvat_canvas_selected_point');
                     });
 
@@ -485,6 +509,7 @@ export class CanvasViewImpl implements CanvasView, Listener {
                         });
 
                         circle.off('dblclick', dblClickHandler);
+                        circle.off('contextmenu', contextmenuHandler);
                         circle.removeClass('cvat_canvas_selected_point');
                     });
 
@@ -684,10 +709,21 @@ export class CanvasViewImpl implements CanvasView, Listener {
             } else {
                 this.loadingAnimation.classList.add('cvat_canvas_hidden');
                 const ctx = this.background.getContext('2d');
-                this.background.setAttribute('width', `${image.width}px`);
-                this.background.setAttribute('height', `${image.height}px`);
+                this.background.setAttribute('width', `${image.renderWidth}px`);
+                this.background.setAttribute('height', `${image.renderHeight}px`);
+
                 if (ctx) {
-                    ctx.drawImage(image, 0, 0);
+                    if (image.imageData instanceof ImageData) {
+                        ctx.scale(image.renderWidth / image.imageData.width,
+                            image.renderHeight / image.imageData.height);
+                        ctx.putImageData(image.imageData, 0, 0);
+                        // Transformation matrix must not affect the putImageData() method.
+                        // By this reason need to redraw the image to apply scale.
+                        // https://www.w3.org/TR/2dcontext/#dom-context-2d-putimagedata
+                        ctx.drawImage(this.background, 0, 0);
+                    } else {
+                        ctx.drawImage(image.imageData, 0, 0);
+                    }
                 }
                 this.moveCanvas();
                 this.resizeCanvas();
@@ -701,6 +737,12 @@ export class CanvasViewImpl implements CanvasView, Listener {
         } else if ([UpdateReasons.IMAGE_ZOOMED, UpdateReasons.IMAGE_FITTED].includes(reason)) {
             this.moveCanvas();
             this.transformCanvas();
+            if (reason === UpdateReasons.IMAGE_FITTED) {
+                this.canvas.dispatchEvent(new CustomEvent('canvas.fit', {
+                    bubbles: false,
+                    cancelable: true,
+                }));
+            }
         } else if (reason === UpdateReasons.IMAGE_MOVED) {
             this.moveCanvas();
         } else if ([UpdateReasons.OBJECTS_UPDATED, UpdateReasons.SET_Z_LAYER].includes(reason)) {
@@ -892,7 +934,7 @@ export class CanvasViewImpl implements CanvasView, Listener {
                 this.activate(activeElement);
             }
 
-            if (state.points
+            if (state.points.length !== drawnState.points.length || state.points
                 .some((p: number, id: number): boolean => p !== drawnState.points[id])
             ) {
                 const translatedPoints: number[] = translate(state.points);
@@ -1159,6 +1201,13 @@ export class CanvasViewImpl implements CanvasView, Listener {
                     ).map((x: number): number => x - offset);
 
                     this.drawnStates[state.clientID].points = points;
+                    this.canvas.dispatchEvent(new CustomEvent('canvas.dragshape', {
+                        bubbles: false,
+                        cancelable: true,
+                        detail: {
+                            id: state.clientID,
+                        },
+                    }));
                     this.onEditDone(state, points);
                 }
             });
@@ -1209,6 +1258,13 @@ export class CanvasViewImpl implements CanvasView, Listener {
                 ).map((x: number): number => x - offset);
 
                 this.drawnStates[state.clientID].points = points;
+                this.canvas.dispatchEvent(new CustomEvent('canvas.resizeshape', {
+                    bubbles: false,
+                    cancelable: true,
+                    detail: {
+                        id: state.clientID,
+                    },
+                }));
                 this.onEditDone(state, points);
             }
         });

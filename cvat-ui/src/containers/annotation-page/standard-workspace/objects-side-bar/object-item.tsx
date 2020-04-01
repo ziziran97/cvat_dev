@@ -5,11 +5,9 @@
 import React from 'react';
 import copy from 'copy-to-clipboard';
 import { connect } from 'react-redux';
-import {
-    ActiveControl,
-    CombinedState,
-    ColorBy,
-} from 'reducers/interfaces';
+
+import { LogType } from 'cvat-logger';
+import { ActiveControl, CombinedState, ColorBy } from 'reducers/interfaces';
 import {
     collapseObjectItems,
     changeLabelColorAsync,
@@ -45,6 +43,7 @@ interface StateToProps {
     activeControl: ActiveControl;
     minZLayer: number;
     maxZLayer: number;
+    normalizedKeyMap: Record<string, string>;
 }
 
 interface DispatchToProps {
@@ -93,6 +92,9 @@ function mapStateToProps(state: CombinedState, own: OwnProps): StateToProps {
                 colorBy,
             },
         },
+        shortcuts: {
+            normalizedKeyMap,
+        },
     } = state;
 
     const index = states
@@ -116,6 +118,7 @@ function mapStateToProps(state: CombinedState, own: OwnProps): StateToProps {
         activated: activatedStateID === own.clientID,
         minZLayer,
         maxZLayer,
+        normalizedKeyMap,
     };
 }
 
@@ -253,7 +256,7 @@ class ObjectItemContainer extends React.PureComponent<Props> {
             pathname,
         } = window.location;
 
-        const search = `frame=${frameNumber}&object=${objectState.serverID}`;
+        const search = `frame=${frameNumber}&type=${objectState.objectType}&serverID=${objectState.serverID}`;
         const url = `${origin}${pathname}?${search}`;
         copy(url);
     };
@@ -292,13 +295,15 @@ class ObjectItemContainer extends React.PureComponent<Props> {
     };
 
     private lock = (): void => {
-        const { objectState } = this.props;
+        const { objectState, jobInstance } = this.props;
+        jobInstance.logger.log(LogType.lockObject, { locked: true });
         objectState.lock = true;
         this.commit();
     };
 
     private unlock = (): void => {
-        const { objectState } = this.props;
+        const { objectState, jobInstance } = this.props;
+        jobInstance.logger.log(LogType.lockObject, { locked: false });
         objectState.lock = false;
         this.commit();
     };
@@ -405,7 +410,12 @@ class ObjectItemContainer extends React.PureComponent<Props> {
     };
 
     private changeAttribute = (id: number, value: string): void => {
-        const { objectState } = this.props;
+        const { objectState, jobInstance } = this.props;
+        jobInstance.logger.log(LogType.changeAttribute, {
+            id,
+            value,
+            object_id: objectState.clientID,
+        });
         const attr: Record<number, string> = {};
         attr[id] = value;
         objectState.attributes = attr;
@@ -431,6 +441,7 @@ class ObjectItemContainer extends React.PureComponent<Props> {
             activated,
             colorBy,
             colors,
+            normalizedKeyMap,
         } = this.props;
 
         const {
@@ -472,6 +483,7 @@ class ObjectItemContainer extends React.PureComponent<Props> {
                 color={stateColor}
                 colors={colors}
                 attributes={attributes}
+                normalizedKeyMap={normalizedKeyMap}
                 labels={labels}
                 collapsed={collapsed}
                 navigateFirstKeyframe={

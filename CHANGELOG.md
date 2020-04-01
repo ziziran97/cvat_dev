@@ -9,9 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 -
 
 ### Changed
-- VOC task export now does not use official label map by default, but takes one
-  from the source task to avoid primary-class and class part name
-  clashing ([#1275](https://github.com/opencv/cvat/issues/1275))
+-
 
 ### Deprecated
 -
@@ -21,6 +19,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 -
+
+### Security
+-
+
+## [1.0.0-alpha] - 2020-03-31
+### Added
+- Data streaming using chunks (https://github.com/opencv/cvat/pull/1007)
+- New UI: showing file names in UI (https://github.com/opencv/cvat/pull/1311)
+- New UI: delete a point from context menu (https://github.com/opencv/cvat/pull/1292)
+
+### Fixed
+- Git app cannot clone a repository (https://github.com/opencv/cvat/pull/1330)
+- New UI: preview position in task details (https://github.com/opencv/cvat/pull/1312)
+- AWS deployment (https://github.com/opencv/cvat/pull/1316)
+
+## [0.6.1] - 2020-03-21
+### Changed
+- VOC task export now does not use official label map by default, but takes one
+  from the source task to avoid primary-class and class part name
+  clashing ([#1275](https://github.com/opencv/cvat/issues/1275))
+
+### Fixed
+- File names in LabelMe format export are no longer truncated ([#1259](https://github.com/opencv/cvat/issues/1259))
+- `occluded` and `z_order` annotation attributes are now correctly passed to Datumaro ([#1271](https://github.com/opencv/cvat/pull/1271))
+- Annotation-less tasks now can be exported as empty datasets in COCO ([#1277](https://github.com/opencv/cvat/issues/1277))
+- Frame name matching for video annotations import -
+  allowed `frame_XXXXXX[.ext]` format ([#1274](https://github.com/opencv/cvat/pull/1274))
 
 ### Security
 - Bump acorn from 6.3.0 to 6.4.1 in /cvat-ui ([#1270](https://github.com/opencv/cvat/pull/1270))
@@ -48,6 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - React & Redux & Antd based dashboard
 - Yolov3 interpretation script fix and changes to mapping.json
 - YOLO format support ([#1151](https://github.com/opencv/cvat/pull/1151))
+- Added support for OpenVINO 2020
 
 ### Fixed
 - Exception in Git plugin [#826](https://github.com/opencv/cvat/issues/826)

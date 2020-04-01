@@ -4,56 +4,47 @@
 # SPDX-License-Identifier: MIT
 
 from collections import OrderedDict
-import os
-import os.path as osp
 
 from django.db import transaction
 
 from cvat.apps.annotation.annotation import Annotation
 from cvat.apps.engine.annotation import TaskAnnotation
-from cvat.apps.engine.models import Task, ShapeType, AttributeType
+from cvat.apps.engine.models import ShapeType, AttributeType
 
 import datumaro.components.extractor as datumaro
 from datumaro.util.image import Image
 
 
-class CvatImagesDirExtractor(datumaro.Extractor):
-    _SUPPORTED_FORMATS = ['.png', '.jpg']
-
-    def __init__(self, url):
+class CvatImagesExtractor(datumaro.Extractor):
+    def __init__(self, url, frame_provider):
         super().__init__()
 
-        items = []
-        for (dirpath, _, filenames) in os.walk(url):
-            for name in filenames:
-                path = osp.join(dirpath, name)
-                if self._is_image(path):
-                    item_id = Task.get_image_frame(path)
-                    item = datumaro.DatasetItem(id=item_id, image=path)
-                    items.append((item.id, item))
-
-        items = sorted(items, key=lambda e: int(e[0]))
-        items = OrderedDict(items)
-        self._items = items
-
+        self._frame_provider = frame_provider
         self._subsets = None
 
     def __iter__(self):
-        for item in self._items.values():
-            yield item
+        frames = self._frame_provider.get_frames(
+            self._frame_provider.Quality.ORIGINAL,
+            self._frame_provider.Type.NUMPY_ARRAY)
+        for item_id, image in enumerate(frames):
+            yield datumaro.DatasetItem(
+                id=item_id,
+                image=Image(image),
+            )
 
     def __len__(self):
-        return len(self._items)
+        return len(self._frame_provider)
 
     def subsets(self):
         return self._subsets
 
-    def _is_image(self, path):
-        for ext in self._SUPPORTED_FORMATS:
-            if osp.isfile(path) and path.endswith(ext):
-                return True
-        return False
-
+    def get(self, item_id, subset=None, path=None):
+        if path or subset:
+            raise KeyError()
+        return datumaro.DatasetItem(
+            id=item_id,
+            image=self._frame_provider[item_id].getvalue()
+        )
 
 class CvatAnnotationsExtractor(datumaro.Extractor):
     def __init__(self, url, cvat_annotations):
@@ -91,7 +82,9 @@ class CvatAnnotationsExtractor(datumaro.Extractor):
     @staticmethod
     def _load_categories(cvat_anno):
         categories = {}
-        label_categories = datumaro.LabelCategories()
+
+        label_categories = datumaro.LabelCategories(
+            attributes=['occluded', 'z_order'])
 
         for _, label in cvat_anno.meta['task']['labels']:
             label_categories.add(label['name'])
@@ -144,6 +137,12 @@ class CvatAnnotationsExtractor(datumaro.Extractor):
             anno_group = shape_obj.group
             anno_label = map_label(shape_obj.label)
             anno_attr = convert_attrs(shape_obj.label, shape_obj.attributes)
+            anno_attr['occluded'] = shape_obj.occluded
+            anno_attr['z_order'] = shape_obj.z_order
+
+            if hasattr(shape_obj, 'track_id'):
+                anno_attr['track_id'] = shape_obj.track_id
+                anno_attr['keyframe'] = shape_obj.keyframe
 
             anno_points = shape_obj.points
             if shape_obj.type == ShapeType.POINTS:
@@ -166,7 +165,6 @@ class CvatAnnotationsExtractor(datumaro.Extractor):
 
         return item_anno
 
-
 class CvatTaskExtractor(CvatAnnotationsExtractor):
     def __init__(self, url, db_task, user):
         cvat_annotations = TaskAnnotation(db_task.id, user)
@@ -177,6 +175,8 @@ class CvatTaskExtractor(CvatAnnotationsExtractor):
 
 
 def match_frame(item, cvat_task_anno):
+    is_video = cvat_task_anno.meta['task']['mode'] == 'interpolation'
+
     frame_number = None
     if frame_number is None:
         try:
@@ -193,6 +193,8 @@ def match_frame(item, cvat_task_anno):
             frame_number = int(item.id)
         except Exception:
             pass
+    if frame_number is None and is_video and item.id.startswith('frame_'):
+        frame_number = int(item.id[len('frame_'):])
     if not frame_number in cvat_task_anno.frame_info:
         raise Exception("Could not match item id: '%s' with any task frame" %
             item.id)
@@ -234,7 +236,7 @@ def import_dm_annotations(dm_dataset, cvat_task_anno):
                     frame=frame_number,
                     label=label_cat.items[ann.label].name,
                     points=ann.points,
-                    occluded=False,
+                    occluded=ann.attributes.get('occluded') == True,
                     group=group_map.get(ann.group, 0),
                     attributes=[cvat_task_anno.Attribute(name=n, value=str(v))
                         for n, v in ann.attributes.items()],
