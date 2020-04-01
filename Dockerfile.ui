@@ -4,7 +4,6 @@ ARG http_proxy
 ARG https_proxy
 ARG no_proxy
 ARG socks_proxy
-
 ENV TERM=xterm \
     http_proxy=${http_proxy}   \
     https_proxy=${https_proxy} \
@@ -14,6 +13,8 @@ ENV TERM=xterm \
 ENV LANG='C.UTF-8'  \
     LC_ALL='C.UTF-8'
 
+RUN npm install -g cnpm --registry=https://registry.npm.taobao.org
+
 # Install dependencies
 COPY cvat-core/package*.json /tmp/cvat-core/
 COPY cvat-canvas/package*.json /tmp/cvat-canvas/
@@ -21,21 +22,21 @@ COPY cvat-ui/package*.json /tmp/cvat-ui/
 
 # Install cvat-core dependencies
 WORKDIR /tmp/cvat-core/
-RUN npm install
+RUN cnpm install
 
 # Install cvat-canvas dependencies
 WORKDIR /tmp/cvat-canvas/
-RUN npm install
+RUN cnpm install
 
 # Install cvat-ui dependencies
 WORKDIR /tmp/cvat-ui/
-RUN npm install
+RUN cnpm install
 
 # Build source code
 COPY cvat-core/ /tmp/cvat-core/
 COPY cvat-canvas/ /tmp/cvat-canvas/
 COPY cvat-ui/ /tmp/cvat-ui/
-RUN npm run build
+RUN cnpm run build
 
 FROM nginx:stable-alpine
 # Replace default.conf configuration to remove unnecessary rules
