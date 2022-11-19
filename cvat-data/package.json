@@ -17,7 +17,7 @@
     "eslint-plugin-security": "^1.4.0",
     "nodemon": "^1.19.2",
     "webpack": "^4.39.3",
-    "webpack-cli": "^3.3.7",
+    "webpack-cli": "^3.3.12",
     "worker-loader": "^2.0.0"
   },
   "dependencies": {
